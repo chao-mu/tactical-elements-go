@@ -1,120 +1,98 @@
 package data
 
 import (
-	"encoding/json"
-	"fmt"
-	"io/ioutil"
-	"math/rand"
-	"os"
+	"database/sql"
+	"github.com/pkg/errors"
 )
 
 type PuzzleCollection struct {
-	ID      string   `json:"id"`
-	Name    string   `json:"name"`
-	PuzzlesWithSolutions []PuzzleWithSolutions `json:"puzzles"`
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Slug string `json:"slug"`
 }
 
-func GetPuzzleCollection(unsafeID string) (*PuzzleCollection, error) {
-	allowedIDs := []string{
-		"checkables",
-		"checks-captures",
-		"knight-forkable",
-		"undefended",
-	}
-	for _, allowedID := range allowedIDs {
-		if allowedID == unsafeID {
-			path := fmt.Sprintf("assets/puzzles/%s.json", allowedID)
-			puzzles, err := ReadPuzzlesWithSolutions(path)
-			if err != nil {
-				return nil, err
-			}
-
-			return &PuzzleCollection{
-				ID:      allowedID,
-				PuzzlesWithSolutions: puzzles,
-			}, nil
-		}
-	}
-
-  return nil, fmt.Errorf("Unable to find puzzle collection of id %s", unsafeID)
+type PuzzleCollectionModel struct {
+	db *sql.DB
 }
 
-func (c PuzzleCollection) RandomPuzzle() PuzzleWithSolutions {
-	id := rand.Intn(len(c.PuzzlesWithSolutions))
-	return c.PuzzlesWithSolutions[id]
+func (m PuzzleCollectionModel) Upsert(col *PuzzleCollection) error {
+	row := m.db.QueryRow("select id from puzzle_collections where slug = ?", col.Slug)
+
+	err := row.Scan(&col.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err = m.db.Exec("insert into puzzle_collections (slug) values (?)", col.Slug)
+
+		return err
+	}
+
+	return err
 }
 
 type Puzzle struct {
-	ID  int    `json:"id"`
-	FEN string `json:"fen"`
+	ID           int    `json:"id"`
+	FEN          string `json:"fen"`
+	CollectionID int    `json:"collectionId"`
 }
 
-type PuzzleWithSolutions struct {
-  Puzzle
-	Solutions       []string          `json:"solution"`
-	SolutionAliases map[string]string `json:"solutionAliases"`
+type PuzzleModel struct {
+	db *sql.DB
 }
 
-func GetPuzzleWithSolutions(colID string, puzzleID int) (PuzzleWithSolutions, error) {
-  col, err := GetPuzzleCollection(colID)
-  if err != nil {
-    return PuzzleWithSolutions{}, err
-  }
+func (m PuzzleModel) Upsert(p *Puzzle) error {
+	row := m.db.QueryRow("select id from puzzles where fen = ? and collection_id = ?", p.FEN, p.CollectionID)
 
-  if puzzleID >= len(col.PuzzlesWithSolutions) || puzzleID < 0 {
-    return PuzzleWithSolutions{}, fmt.Errorf("Invalid puzzle id %d", puzzleID)
-  }
+	values := []any{
+		p.FEN,
+		p.CollectionID,
+	}
 
-  return col.PuzzlesWithSolutions[puzzleID], nil
+	err := row.Scan(&p.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		_, err = m.db.Exec("insert into puzzles (fen, collection_id) values (?, ?)", values...)
+
+		return err
+	}
+
+	values = append(values, p.ID)
+	_, err = m.db.Exec("update puzzles set fen=?, collection_id=? where id = ?", values...)
+
+	return err
 }
 
-func (p *PuzzleWithSolutions) GuessOne(candidate string) bool {
-	for _, solution := range p.Solutions {
-		if solution == candidate {
-			return true
-		}
-	}
-
-	for solution, alias := range p.SolutionAliases {
-		if solution == candidate || alias == candidate {
-			return true
-		}
-	}
-
-	return false
+type PuzzleSolution struct {
+	ID             int    `json:"id"`
+	PuzzleID       int    `json:"puzzleId"`
+	Solution       string `json:"solution"`
+	SolutionPretty string `json:"solutionPretty"`
 }
 
-func (p *PuzzleWithSolutions) GuessAll(solutions []string) bool {
-	if len(solutions) != len(p.Solutions) {
-		return false
-	}
-
-	for _, solution := range solutions {
-		if !p.GuessOne(solution) {
-			return false
-		}
-	}
-
-	return true
+type PuzzleSolutionModel struct {
+	db *sql.DB
 }
 
-func ReadPuzzlesWithSolutions(jsonPath string) ([]PuzzleWithSolutions, error) {
-	puzzles := make([]PuzzleWithSolutions, 0)
-	jsonFile, err := os.Open(jsonPath)
-	if err != nil {
-		return puzzles, err
-	}
-	defer jsonFile.Close()
+func (m PuzzleSolutionModel) DeleteAll(pid int) error {
+	_, err := m.db.Exec("delete from puzzle_solutions where puzzle_id = ?", pid)
 
-	byteValue, _ := ioutil.ReadAll(jsonFile)
-	err = json.Unmarshal(byteValue, &puzzles)
-	if err != nil {
-		return puzzles, err
-	}
-
-	for idx := range puzzles {
-		puzzles[idx].ID = idx
-	}
-
-	return puzzles, nil
+	return err
 }
+
+func (m PuzzleSolutionModel) Insert(p *PuzzleSolution) error {
+	values := []any{
+		p.PuzzleID,
+		p.Solution,
+		p.SolutionPretty,
+	}
+
+	_, err := m.db.Exec("insert into puzzle_solutions (puzzle_id, solution, solution_pretty) values (?, ?, ?)", values...)
+
+	return err
+}
+
+type PuzzleGuesses struct {
+	ID        int    `json:"id"`
+	Guess     string `json:"guess"`
+	Correct   bool   `json:"correct"`
+	SessionID string `json:"sessionId"`
+}
+
+type PuzzleSolutionSet []PuzzleSolution

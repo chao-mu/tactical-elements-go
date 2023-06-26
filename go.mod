@@ -3,7 +3,6 @@ module github.com/chao-mu/tactical-elements-go
 go 1.20
 
 require (
-	github.com/mattn/go-sqlite3 v1.14.17
 	github.com/stretchr/testify v1.8.1
 )
 
@@ -148,7 +147,6 @@ require (
 	modernc.org/opt v0.1.1 // indirect
 	modernc.org/ql v1.0.0 // indirect
 	modernc.org/sortutil v1.1.0 // indirect
-	modernc.org/sqlite v1.18.0 // indirect
 	modernc.org/strutil v1.1.1 // indirect
 	modernc.org/token v1.0.0 // indirect
 	modernc.org/zappy v1.0.0 // indirect

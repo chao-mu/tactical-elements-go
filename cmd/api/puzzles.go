@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/chao-mu/tactical-elements-go/internal/data"
@@ -14,7 +13,7 @@ func (app *application) guessHandler(w http.ResponseWriter, r *http.Request) {
 		Solution     string `json:"solution"`
 	}
 
-	err := json.NewDecoder(r.Body).Decode(&input)
+	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.writeError(w, r, http.StatusBadRequest, err)
 		return
@@ -40,7 +39,7 @@ func (app *application) advanceHandler(w http.ResponseWriter, r *http.Request) {
 		Solutions    []string `json:"solutions"`
 	}
 
-	err := json.NewDecoder(r.Body).Decode(&input)
+	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.writeError(w, r, http.StatusBadRequest, err)
 		return
@@ -64,7 +63,7 @@ func (app *application) nextPuzzleHandler(w http.ResponseWriter, r *http.Request
 		CollectionID string `json:"collectionID"`
 	}
 
-	err := json.NewDecoder(r.Body).Decode(&input)
+	err := app.readJSON(w, r, &input)
 	if err != nil {
 		app.writeError(w, r, http.StatusBadRequest, err)
 		return
